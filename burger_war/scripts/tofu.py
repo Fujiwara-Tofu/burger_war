@@ -19,6 +19,7 @@ import cv2
 import numpy as np
 import random
 import sendIdToJudge
+from tf.transformations import euler_from_quaternion
 
 class State():
     '''
@@ -78,8 +79,8 @@ class TofuBot():
 
 
     def calcTwist(self):
-    	x = 1
-	th = 0
+        x = 1
+        th = 0
         twist = Twist()
         twist.linear.x = x; twist.linear.y = 0; twist.linear.z = 0
         twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th
@@ -91,33 +92,32 @@ class TofuBot():
         return False
 
     def area(self,img):
-	hsv = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+    hsv = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
 
-	hsvLower = np.array([0, 128, 0])
-	hsvUpper = np.array([30, 255, 255])
-	mask1 = cv2.inRange(hsv, hsvLower, hsvUpper)
+    hsvLower = np.array([0, 128, 0])
+    hsvUpper = np.array([30, 255, 255])
+    mask1 = cv2.inRange(hsv, hsvLower, hsvUpper)
 
-	hsvLower = np.array([150, 128, 0])
-	hsvUpper = np.array([179, 255, 255])
-	mask2 = cv2.inRange(hsv, hsvLower, hsvUpper)
-	
-	mask = mask1 + mask2
+    hsvLower = np.array([150, 128, 0])
+    hsvUpper = np.array([179, 255, 255])
+    mask2 = cv2.inRange(hsv, hsvLower, hsvUpper)
+    
+    mask = mask1 + mask2
 
-	masked_hsv = cv2.bitwise_and(img, img, mask=mask)
-	gray = cv2.cvtColor(masked_img,cv2.COLOR_BGR2GRAY)
+    masked_hsv = cv2.bitwise_and(img, img, mask=mask)
+    gray = cv2.cvtColor(masked_img,cv2.COLOR_BGR2GRAY)
 
-	ret,thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY)
-	image, contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    ret,thresh = cv2.threshold(gray,0,255,cv2.THRESH_BINARY)
+    image, contours, hierarchy = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
 
-	return cv2.contourArea(contours[0])
+    return cv2.contourArea(contours[0])
 
 
     def strategy(self):
         state = State()
-        position = data.pose.pose.position
-        errbar = 0.2	#[m]
-        ex_state = [1,2,3,4]	#existing state
-	
+        errbar = 0.2    #[m]
+        ex_state = [1,2,3,4]    #existing state
+        RIGHT = 0; LEFT = 1     # when state = 1 trace wall by left hand or right hand
         '''
         state = 1 壁沿い       
         state = 2 原点復帰
@@ -135,13 +135,17 @@ class TofuBot():
         r.sleep()
 
         while not rospy.is_shutdown():
-            x = position.x; y = position.y
             area = area(self.img)
             if area > 2000:
-			    state.both_sub(ex_state[3],state.now,False)
+                state.both_sub(ex_state[3],state.now,False)
 
             if state.now == ex_state[0]:
-                tracewall()
+                if migi:
+                    twist = walltrace(RIGHT)
+                elif hidari:
+                    twist = walltrace(LEFT)
+                self.vel_pub.publish(twist)
+
                 #的の近く
                 if extentFlag(x, x-errbar,x+errbar) and extentFlag(y, y-errbar,y+errbar):
                     aimmarker()
@@ -167,10 +171,10 @@ class TofuBot():
 
             #割込みでカメラ情報を読んで止まる
             elif state.now == ex_state[3]:
-                stop()
+                twist = stop()
                 if state.done == True:
                     state.both_sub(state.now, ex_state[3], False)
-#		else:
+#        else:
             r.sleep()
 #end while
 
@@ -179,8 +183,9 @@ class TofuBot():
     def lidarCallback(self, data):
         self.scan = data
         rospy.loginfo(self.scan.ranges)
-	    #print(self.scan.ranges[10])
+        #print(self.scan.ranges[10])
         self.laser = self.scan.ranges
+        self.old_lider = 
 
     # camera image call back sample
     # comvert image topic to opencv object and show
@@ -198,6 +203,11 @@ class TofuBot():
     def imuCallback(self, data):
         self.imu = data
         rospy.loginfo(self.imu)
+        euler = euler_from_quaternion(self.test)
+        roll_rad = euler[0]
+        pitch_rad = euler[1]
+        yaw_rad = euler[2]        #this is the angle of machine 0~180 -180~0
+        #print(yaw_rad * 180 / 3.14)
 
     # odom call back sample
     # update odometry state
@@ -217,61 +227,48 @@ class TofuBot():
 
     def walltrace(self, data): 
         
-        r = self.scan.ranges[55] - self.scan.ranges[124]
-        l = self.scan.ranges[-124] - self.scan.ranges[-55]
+        r = self.scan.ranges[45] - self.scan.ranges[135]
+        l = self.scan.ranges[225] - self.scan.ranges[315]
         x = 0.0
         th = 0.0
         kp = 0.1
         twist = Twist()
         if data == 0:
-		    if self.scan.ranges[55] > 0.2:
-			    wallrad = 0.2
-		    else:
-			    wallrad = 0
+            if self.scan.ranges[45] > 0.2:
+                wallrad = 0.2
+            else:
+                wallrad = 0
 
-		    if 0.1 > r + wallrad and -0.1 < r + wallrad:
-			    x = 0.1
-			    th = 0
-			    print("a")
-		    elif 0.1 <= r + wallrad:
-			    x = 0.05
-			    th = kp*r
-			    print("b")
-		    else: 
-			    x = 0.05
-			    th = kp*r
-			    print("c")
+            if 0.1 > r + wallrad and -0.1 < r + wallrad:
+                x = 0.1;th = 0
+                #print("a")
+            elif 0.1 <= r + wallrad:
+                x = 0.05; th = kp*r
+                #print("b")
+            else: 
+                x = 0.05; th = kp*r
+                #print("c")
         else:
-            if self.scan.ranges[-55] > 0.2:
+            if self.scan.ranges[315] > 0.2:
                 wallrad = 0.2
             else:
                 wallrad = 0
 
             if 0.2 > l and -0.2 < l:
-                x = 0.1
-                th = 0
-                print("d")
+                x = 0.1; th = 0
+                #print("d")
             elif 0.2 <= l:
-                x = 0.05
-                th = kp*l
-                print("e")
+                x = 0.05; th = kp*l
+                #print("e")
             else: 
-                x = 0.05
-                th = kp*l
-                print("f")
-        
-        twist.linear.x = x
-        twist.linear.y = 0
-        twist.linear.z = 0
-        twist.angular.x = 0
-        twist.angular.y = 0
-        twist.angular.z = th
+                x = 0.05; th = kp*l
+                #print("f")
+        twist.linear.x = x; twist.linear.y = 0; twist.linear.z = 0
+        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th
         return twist
         
 
     def odmreset():
-        self.pose_x = data.pose.pose.position.x
-        self.pose_y = data.pose.pose.position.y
 
         del_range = 0
         distance = 0.3
@@ -299,14 +296,14 @@ class TofuBot():
                     twist = Twist()
                     twist.linear.x = x; twist.linear.y = 0; twist.linear.z = 0
                     twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
-	            self.vel_pub.publish(twist)
+                self.vel_pub.publish(twist)
 
                 while self.scan.ranges[55] - self.scan.ranges[124] > -0.1 or self.scan.ranges[55] - self.scan.ranges[124] > 0.1:
                     th = 1
                     twist = Twist()
                     twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
                     twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th
-	            self.vel_pub.publish(twist)
+                self.vel_pub.publish(twist)
                 end = 1
                 self.turn_count += 1
 
