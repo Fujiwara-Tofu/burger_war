@@ -10,7 +10,8 @@
   <include file="$(find burger_navigation)/launch/burger_navigation.launch">
   </include>
 
-  <node pkg="burger_war" type="tofu.py" name="tofu_node" output="screen"/>
+    <!--  <node pkg="burger_war" type="tofu.py" name="tofu_node" output="screen"/> -->
+    <node pkg="burger_war" type="okara.py" name="tofu_node" output="screen"/>
 
 
 
