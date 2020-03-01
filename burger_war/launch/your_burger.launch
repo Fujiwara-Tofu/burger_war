@@ -5,12 +5,13 @@
     <!-- You can change control program  -->
 
 
-    <!-- sample program node -->
+   
 
   <include file="$(find burger_navigation)/launch/burger_navigation.launch">
   </include>
-  
-    <!-- END sample program node -->
+
+  <node pkg="burger_war" type="tofu.py" name="tofu_node" output="screen"/>
+
 
 
     <!-- End of your space  -->
