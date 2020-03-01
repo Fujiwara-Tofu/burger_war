@@ -23,16 +23,17 @@ from tf.transformations import euler_from_quaternion
 
 class State():
     '''
-    now:現在の状態
-    before:過去の状態
-    done:現在の状態が完了の有無のフラグ
-         False True
-    target_x,target_y:ターゲット座標
+    now:state of now
+    before:state of before
+    done:
+         True:  if state is done
+         False: if state is not done
+    target_x,target_y:position of target
     '''
     def __init__(self, now=2, before=3, x=0, y=0):
         self.now = now; self.before = before; self.done= False;
         self.target_x = x; self.target_y = y
-    def both_sub(self, x, y, done):#代入
+    def both_sub(self, x, y, done):#:substitution
         self.now = x; self.before = y; state.done = False
     def both_return(self):
         return self.now, self.before
@@ -135,11 +136,11 @@ class TofuBot():
         r.sleep()
 
         while not rospy.is_shutdown():
-            area = area(self.img)
-            if area > 2000:
+            if self.S > 2000:
                 state.both_sub(ex_state[3],state.now,False)
 
             if state.now == ex_state[0]:
+                #calc from target position (not yet) 
                 if migi:
                     twist = walltrace(RIGHT)
                 elif hidari:
@@ -194,7 +195,7 @@ class TofuBot():
             self.img = self.bridge.imgmsg_to_cv2(data, "bgr8")
         except CvBridgeError as e:
             rospy.logerr(e)
-
+        self.S = self.area(self.img)
         cv2.imshow("Image window", self.img)
         cv2.waitKey(1)
 
@@ -204,11 +205,13 @@ class TofuBot():
         self.imu = data
         rospy.loginfo(self.imu)
         euler = euler_from_quaternion(self.test)
-        roll_rad = euler[0]
-        pitch_rad = euler[1]
-        yaw_rad = euler[2]        #this is the angle of machine 0~180 -180~0
-        #print(yaw_rad * 180 / 3.14)
-
+        #roll_rad = euler[0]
+        #pitch_rad = euler[1]
+        if euler[2] <0:
+            self.yaw_rad = 6.2831853072 + euler[2] 
+        else:
+            self.yaw_rad = euler[2]
+#        print(yaw_rad*180/3.14)
     # odom call back sample
     # update odometry state
     def odomCallback(self, data):
@@ -281,6 +284,8 @@ class TofuBot():
         #self.posi3 = [,]
         #self.posi4 = [,]
 
+
+
         while end > 0:
             old_lider = self.scan.ranges[0]
             if old_lider - self.scan.ranges[0] > del_range:
@@ -314,4 +319,3 @@ if __name__ == '__main__':
     rospy.init_node('tofubot')
     bot = TofuBot('Tofu')
     bot.strategy()
-
